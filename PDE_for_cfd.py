@@ -6,12 +6,12 @@ from qulacs.gate import X, Z, RX, RY, RZ, CNOT, merge, DenseMatrix,add
 from qulacs.state import inner_product
 import matplotlib.pyplot as plt
 import numpy as np
-
+from trotterization_2510dot17978v1 import build_lee_trotter_step
 
 # ----------------------
 # Parameters
 # ----------------------
-n = 4                 # qubits per spatial dimension
+n = 5                 # qubits per spatial dimension
 Nx = 2**n
 Ny = 2**n
 
@@ -47,6 +47,7 @@ def idx(c, ix, iy):
 # Build PDE operator A (df/dt = A f)
 # ----------------------
 A = np.zeros((Ndof, Ndof), dtype=np.float64)
+
 
 def central_diff_x(c_from, c_to, coef):
     """
@@ -136,53 +137,36 @@ def fdm_evolution(f0, T):
     return f
 
 
-# U_step = exp(A * tau_q) as a 2^ntot x 2^ntot unitary (same mapping as above)
+###################################################################################################
+#######################################____#####____###############################################
+###########################################\###/###################################################
+############################################-Q-####################################################
 
 
-
-# HERE 
-# https://dojo.qulacs.org/en/latest/notebooks/4.2_trotter_decomposition.html link for the trotterization
-# Just have to implement the good gates and the U_j 
-# Carreful : multi-controlled gate might be a bit heavy
-#
-U_step = expm(A * tau_q).astype(np.complex128)
-gate_step = DenseMatrix(list(range(ntot)), U_step)
-
-def quantum_evolution_using_qulacs(f0, T):
+# ----------------------
+# Compute the quantum evolution using the LEE trotter step
+# ----------------------
+def quantum_evolution_for_lee(f0, T):
+    """"
+    Trotter step V(tau) ≈ Q_y(Tau) Q_x(Tau)
     """
-    1. Embed f0 into a quantum state |ψ0> on ntot qubits.
-    2. Apply the unitary step U_step = exp(A τ_q) s = T/τ_q times.
-    3. Read back the amplitudes and interpret them as the discretized fields.
-    """
-    # normalize f0 to get amplitudes
+    # 1. Normalize and load initial state
     norm = np.linalg.norm(f0)
     psi0 = f0.astype(np.complex128) / (norm if norm > 0 else 1.0)
 
-    # load into Qulacs quantum state
     qs = QuantumState(ntot)
     qs.load(psi0)
 
+    # 2. Build one Trotter-step circuit
+    step_circuit = build_lee_trotter_step(n, tau_q, u_bar, rho_bar, l)
+
+    # 3. Apply it s = T / Tau_q times
     steps = int(round(T / tau_q))
-    circuit = QuantumCircuit(ntot)
-    for _ in range(steps):
-        circuit.add_gate(gate_step)
-
-    circuit.update_quantum_state(qs)
-
-    # extract amplitudes and rescale back to PDE normalization
+    for k in range(steps):
+        step_circuit.update_quantum_state(qs)
+    # 4. Read amplitudes and rescale
     vec = np.array(qs.get_vector()) * norm
-    # vec[k] corresponds to classical index k (same mapping)
     return vec.real
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -196,7 +180,7 @@ all_values = []
 for row, T in enumerate(times):
     # compute all three solutions
     f_exact = exact_solution(f0, T)
-    f_q     = quantum_evolution_using_qulacs(f0, T)
+    f_q     = quantum_evolution_for_lee(f0, T)
     f_fdm   = fdm_evolution(f0, T)
 
     all_values.extend(extract_pressure(f_exact).flatten())
