@@ -6,7 +6,9 @@ from qulacs.gate import X, Z, RX, RY, RZ, CNOT, merge, DenseMatrix,add
 from qulacs.state import inner_product
 import matplotlib.pyplot as plt
 import numpy as np
-from trotterization_2510dot17978v1 import build_lee_trotter_step
+
+import lee_trotter
+
 
 # ----------------------
 # Parameters
@@ -37,10 +39,6 @@ print(f"Grid: {Nx} x {Ny}, DOF = {Ndof}")
 # Indexing helper
 # ----------------------
 def idx(c, ix, iy):
-    """
-    Map (component c, x-index ix, y-index iy) to 1D index in [0, Ndof).
-    c = 0: p, 1: u, 2: v, 3: dummy
-    """
     return c + n_components * (ix + Nx * iy)
 
 # ----------------------
@@ -50,9 +48,6 @@ A = np.zeros((Ndof, Ndof), dtype=np.float64)
 
 
 def central_diff_x(c_from, c_to, coef):
-    """
-    Add coef * ∂_x(field_from) into time derivative of field_to using central differences.
-    """
     for ix in range(Nx):
         for iy in range(Ny):
             row = idx(c_to, ix, iy)
@@ -63,9 +58,6 @@ def central_diff_x(c_from, c_to, coef):
                 A[row, idx(c_from, im, iy)] -= coef / (2 * l)
 
 def central_diff_y(c_from, c_to, coef):
-    """
-    Add coef * ∂_y(field_from) into time derivative of field_to using central differences.
-    """
     for ix in range(Nx):
         for iy in range(Ny):
             row = idx(c_to, ix, iy)
@@ -76,20 +68,16 @@ def central_diff_y(c_from, c_to, coef):
                 A[row, idx(c_from, ix, jm)] -= coef / (2 * l)
 
 # LEE in conservative regime:
-# ∂t p = - (∂x u + ∂y v) - ū ∂x p
 central_diff_x(1, 0, -1.0)
 central_diff_y(2, 0, -1.0)
 central_diff_x(0, 0, -u_bar)
 
-# ∂t u = -∂x p - ū ∂x u
 central_diff_x(0, 1, -1.0)
 central_diff_x(1, 1, -u_bar)
 
-# ∂t v = -∂y p - ū ∂x v
 central_diff_y(0, 2, -1.0)
 central_diff_x(2, 2, -u_bar)
 
-# ∂t dummy = -ū ∂x dummy
 central_diff_x(3, 3, -u_bar)
 
 # ----------------------
@@ -110,9 +98,6 @@ for dx in [0, 1]:
 # Helpers: extract p, evolution methods
 # ----------------------
 def extract_pressure(f):
-    """
-    Extract pressure field p(x,y) as (Ny, Nx) array from full state f.
-    """
     p = np.zeros((Ny, Nx), dtype=np.float64)
     for ix in range(Nx):
         for iy in range(Ny):
@@ -120,16 +105,10 @@ def extract_pressure(f):
     return p
 
 def exact_solution(f0, T):
-    """
-    Exact: f(T) = exp(A T) f(0)
-    """
     U = expm(A * T)
     return U @ f0
 
 def fdm_evolution(f0, T):
-    """
-    Classical FDM (forward Euler): f_{n+1} = f_n + tau_fdm * A f_n
-    """
     steps = int(round(T / tau_fdm))
     f = f0.copy()
     for _ in range(steps):
@@ -145,28 +124,20 @@ def fdm_evolution(f0, T):
 
 # ----------------------
 # Compute the quantum evolution using the LEE trotter step
+#  Trotter step V(tau) ≈ Q_y(Tau) Q_x(Tau)
 # ----------------------
 def quantum_evolution_for_lee(f0, T):
-    """"
-    Trotter step V(tau) ≈ Q_y(Tau) Q_x(Tau)
-    """
-    # 1. Normalize and load initial state
-    norm = np.linalg.norm(f0)
-    psi0 = f0.astype(np.complex128) / (norm if norm > 0 else 1.0)
+    ntot = 2 + 2 * n
+    dim = 2**ntot
 
-    qs = QuantumState(ntot)
-    qs.load(psi0)
+    assert f0.size == dim
 
-    # 2. Build one Trotter-step circuit
-    step_circuit = build_lee_trotter_step(n, tau_q, u_bar, rho_bar, l)
-
-    # 3. Apply it s = T / Tau_q times
+    psi0 = f0.astype(np.complex128)
     steps = int(round(T / tau_q))
-    for k in range(steps):
-        step_circuit.update_quantum_state(qs)
-    # 4. Read amplitudes and rescale
-    vec = np.array(qs.get_vector()) * norm
-    return vec.real
+
+    psiT = lee_trotter.evolve_lee(n, tau_q, steps, u_bar, rho_bar, l, psi0)
+
+    return np.array(psiT)
 
 
 
