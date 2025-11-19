@@ -32,7 +32,7 @@ void add_Uj(QuantumCircuit& circ,
     circ.add_gate(RZ(target, lambda));
 
     for (UINT m = 0; m < j; ++m) {
-        circ.add_gate(CNOT(target, qubits[m]));
+        circ.add_gate(CNOT(target, qubits[(UINT)m]));
     }
 }
 
@@ -42,10 +42,12 @@ void add_Uj_dagger(QuantumCircuit& circ,
                    double lambda) {
     UINT target = qubits[j];
 
-    // inverse order and lambda
+    // inverse order
+
     for (int m = (int)j - 1; m >= 0; --m) {
         circ.add_gate(CNOT(target, qubits[(UINT)m]));
     }
+
     circ.add_gate(RZ(target, -lambda));
     circ.add_gate(H(target));
 }
@@ -117,35 +119,39 @@ void add_Wxj(QuantumCircuit& circ,
              double l) {
     double lambda = -M_PI / 2.0;
 
-    // ---- First factor: U_j(-Pi/2) MCRZ(-u_bar tau / l) U_j(-Pi/2)(dagger) ----
-    add_Uj(circ, qx, j, lambda);
-    std::vector<UINT> controls;
-    for (UINT m = 0; m < j; ++m) controls.push_back(qx[m]);
+    circ.add_gate(H(a2));
+    circ.add_gate(X(a1));
+    add_Uj_dagger(circ, qx, j, lambda);
 
-    double theta_z = -u_bar * tau / l;
+    std::vector<UINT> controls_zz;
+    controls_zz.push_back(a1);
+    for (UINT m = 0; m < j; ++m) {
+        controls_zz.push_back(qx[m]);
+    }
+
+    const double theta_zz = -tau / (rho_bar * l);
+    add_MCRZZ(circ, controls_zz, a2, qx[j], theta_zz);
+
+    add_Uj(circ, qx, j, lambda);
+    circ.add_gate(X(a2));
+    circ.add_gate(H(a1));
+
+    add_Uj_dagger(circ, qx, j, lambda);
+
+    std::vector<UINT> controls;
+    for (UINT m = 0; m < j; ++m) {
+        controls.push_back(qx[m]);
+    }
+
+    const double theta_z = -u_bar * tau / l;
     if (!controls.empty()) {
         add_MCRZ(circ, controls, qx[j], theta_z);
     } else {
         circ.add_gate(RZ(qx[j], theta_z));
     }
-    add_Uj_dagger(circ, qx, j, lambda);
 
-    // ---- Second factor: (H_a1 (x) X_a2 (x) U_j) MCRZZ(...) (U_j)(dagger) (x) X_a1 (x) H_a2) ----
-    circ.add_gate(H(a1));
-    circ.add_gate(X(a2));
     add_Uj(circ, qx, j, lambda);
 
-    // controls for RZZ: a1 and qx[0..j-1]
-    std::vector<UINT> controls_zz;
-    controls_zz.push_back(a1);
-    for (UINT m = 0; m < j; ++m) controls_zz.push_back(qx[m]);
-
-    double theta_zz = -tau / (rho_bar * l);
-    add_MCRZZ(circ, controls_zz, a2, qx[j], theta_zz);
-
-    add_Uj_dagger(circ, qx, j, lambda);
-    circ.add_gate(X(a1));
-    circ.add_gate(H(a2));
 }
 
 void add_Wyj(QuantumCircuit& circ,
@@ -156,17 +162,35 @@ void add_Wyj(QuantumCircuit& circ,
              double rho_bar,
              double l) {
     double lambda = -M_PI / 2.0;
+/*
+
+    add_Uj_dagger(circ, qy, j, lambda);
 
     circ.add_gate(H(a1));
     circ.add_gate(X(a2));
-    add_Uj(circ, qy, j, lambda);
 
-    // controls: a2 and qy[0..j-1]
     std::vector<UINT> controls_zz;
     controls_zz.push_back(a2);
     for (UINT m = 0; m < j; ++m) controls_zz.push_back(qy[m]);
 
     double theta_zz = -tau / (rho_bar * l);
+    add_MCRZZ(circ, controls_zz, a1, qy[j], theta_zz);
+
+    circ.add_gate(H(a1));
+    circ.add_gate(X(a2));
+
+    add_Uj(circ, qy, j, lambda); */
+    circ.add_gate(H(a1));
+    circ.add_gate(X(a2));
+    add_Uj(circ, qy, j, lambda);
+
+    std::vector<UINT> controls_zz;
+    controls_zz.push_back(a2);
+    for (UINT m = 0; m < j; ++m) {
+        controls_zz.push_back(qy[m]);
+    }
+
+    const double theta_zz = -tau / (rho_bar * l);
     add_MCRZZ(circ, controls_zz, a1, qy[j], theta_zz);
 
     add_Uj_dagger(circ, qy, j, lambda);
@@ -207,7 +231,7 @@ void build_lee_trotter_step(QuantumCircuit& circ,
                             double u_bar,
                             double rho_bar,
                             double l) {
-    UINT a1 = 1, a2 = 0;
+    UINT a1 = 0, a2 = 1;
 
     std::vector<UINT> qx(n), qy(n);
     for (int i = 0; i < n; ++i) {
@@ -215,8 +239,8 @@ void build_lee_trotter_step(QuantumCircuit& circ,
         qy[i] = 2 + n + i;
     }
 
-    add_Qx_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
     add_Qy_layer(circ, a1, a2, qy, tau, rho_bar, l);
+    add_Qx_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
 }
 
 // ------------------- Python-visible wrapper: evolve state -------------------
