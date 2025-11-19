@@ -162,27 +162,10 @@ void add_Wyj(QuantumCircuit& circ,
              double rho_bar,
              double l) {
     double lambda = -M_PI / 2.0;
-/*
 
+    circ.add_gate(X(a2));
+    circ.add_gate(H(a1));
     add_Uj_dagger(circ, qy, j, lambda);
-
-    circ.add_gate(H(a1));
-    circ.add_gate(X(a2));
-
-    std::vector<UINT> controls_zz;
-    controls_zz.push_back(a2);
-    for (UINT m = 0; m < j; ++m) controls_zz.push_back(qy[m]);
-
-    double theta_zz = -tau / (rho_bar * l);
-    add_MCRZZ(circ, controls_zz, a1, qy[j], theta_zz);
-
-    circ.add_gate(H(a1));
-    circ.add_gate(X(a2));
-
-    add_Uj(circ, qy, j, lambda); */
-    circ.add_gate(H(a1));
-    circ.add_gate(X(a2));
-    add_Uj(circ, qy, j, lambda);
 
     std::vector<UINT> controls_zz;
     controls_zz.push_back(a2);
@@ -193,9 +176,9 @@ void add_Wyj(QuantumCircuit& circ,
     const double theta_zz = -tau / (rho_bar * l);
     add_MCRZZ(circ, controls_zz, a1, qy[j], theta_zz);
 
-    add_Uj_dagger(circ, qy, j, lambda);
-    circ.add_gate(H(a1));
+    add_Uj(circ, qy, j, lambda);
     circ.add_gate(X(a2));
+    circ.add_gate(H(a1));
 }
 
 // ------------------- Qx(tau), Qy(tau) layers and 1 step V(tau) -------------------
@@ -209,7 +192,8 @@ void add_Qx_layer(QuantumCircuit& circ,
                   double l) {
     UINT n = qx.size();
     for (UINT j = 0; j < n; ++j) {
-        add_Wxj(circ, a1, a2, qx, j, tau, u_bar, rho_bar, l);
+        add_Wxj(circ, a1, a2, qx, j, tau,p_q_real = extract_pressure(psiT.real)
+p_q_imag = extract_pressure(psiT.imag) u_bar, rho_bar, l);
     }
 }
 
@@ -239,8 +223,8 @@ void build_lee_trotter_step(QuantumCircuit& circ,
         qy[i] = 2 + n + i;
     }
 
-    add_Qy_layer(circ, a1, a2, qy, tau, rho_bar, l);
     add_Qx_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
+    add_Qy_layer(circ, a1, a2, qy, tau, rho_bar, l);
 }
 
 // ------------------- Python-visible wrapper: evolve state -------------------
