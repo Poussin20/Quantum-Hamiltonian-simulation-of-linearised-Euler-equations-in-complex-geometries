@@ -17,6 +17,22 @@ using namespace gate;
 using UINT = unsigned int;
 using CPPCTYPE = std::complex<double>;
 
+
+
+// ------------------- P_j(lambda) -------------------
+
+void add_Pj(QuantumCircuit& circ,
+            const std::vector<UINT>& qubits,
+            UINT j,
+            double lambda) {
+    ComplexMatrix mat(2, 2);
+    mat(0, 0) = 1;
+    mat(0, 1) = 0;
+    mat(1, 0) = 0;
+    mat(1, 1) = exp(std::complex<double>(0.0, lambda));
+    circ.add_gate(gate::DenseMatrix(qubits[j], mat));
+}
+
 // ------------------- U_j(lambda) and its inverse -------------------
 
 void add_Uj(QuantumCircuit& circ,
@@ -27,9 +43,8 @@ void add_Uj(QuantumCircuit& circ,
 
     // H
     circ.add_gate(H(target));
-
-    // P_j(lambda) ~ RZ(lambda) up to global phase (paper Eq. 13)
-    circ.add_gate(RZ(target, lambda));
+    
+    add_Pj(circ, qubits, j, lambda);
 
     for (UINT m = 0; m < j; ++m) {
         circ.add_gate(CNOT(target, qubits[(UINT)m]));
@@ -48,7 +63,8 @@ void add_Uj_dagger(QuantumCircuit& circ,
         circ.add_gate(CNOT(target, qubits[(UINT)m]));
     }
 
-    circ.add_gate(RZ(target, -lambda));
+    add_Pj(circ, qubits, j, lambda);
+
     circ.add_gate(H(target));
 }
 
@@ -57,34 +73,27 @@ void add_Uj_dagger(QuantumCircuit& circ,
 void add_MCRZ(QuantumCircuit& circ,
               const std::vector<UINT>& control_qubits,
               UINT target_qubit,
-              double theta) {
-    std::vector<UINT> all_qubits = control_qubits;
-    all_qubits.push_back(target_qubit);
+              double theta) {    
+    CPPCTYPE p0 = std::exp(CPPCTYPE(0.0, -theta/2.0));
+    CPPCTYPE p1 = std::exp(CPPCTYPE(0.0, +theta/2.0));
 
-    const UINT k   = (UINT)all_qubits.size();
-    const UINT dim = 1u << k;
+    ComplexMatrix mat(2, 2);
+    mat(0, 0) = p0;
+    mat(0, 1) = 0;
+    mat(1, 0) = 0;
+    mat(1, 1) = p1;
 
-    ComplexVector diag(dim);
-    diag.setOnes();
+    /* 
+       Create a general 1-qubit matrix gate wich equal to Rz(theta)
+       Because 'class ClsOneQubitRotationGate' has no member named 'add_control_qubit'
+    */ 
+    auto gate = gate::DenseMatrix(target_qubit, mat);
 
-    for (UINT b = 0; b < dim; ++b) {
-        bool ctrl_ok = true;
-        for (UINT ci = 0; ci < control_qubits.size(); ++ci) {
-            UINT bit = (b >> ci) & 1u;
-            if (bit != 1u) { ctrl_ok = false; break; }
-        }
-        if (!ctrl_ok) continue;
-
-        UINT t_bit = (b >> control_qubits.size()) & 1u;
-
-        CPPCTYPE phase = (t_bit == 0u)
-            ? std::exp(CPPCTYPE(0.0, -theta/2.0))
-            : std::exp(CPPCTYPE(0.0, +theta/2.0));
-
-        diag[b] = phase;
+    // Add controls
+    for (auto c : control_qubits) {
+        gate->add_control_qubit(c, 1);
     }
 
-    auto gate = gate::DiagonalMatrix(all_qubits, diag);
     circ.add_gate(gate);
 }
 
@@ -97,14 +106,17 @@ void add_MCRZZ(QuantumCircuit& circ,
                UINT qubit_a,
                UINT qubit_b,
                double theta) {
-    circ.add_gate(CNOT(qubit_a, qubit_b));
+    circ.add_gate(X(qubit_a));
 
     std::vector<UINT> controls = control_qubits;
     controls.push_back(qubit_a);
 
     add_MCRZ(circ, controls, qubit_b, theta);
 
-    circ.add_gate(CNOT(qubit_a, qubit_b));
+
+    circ.add_gate(X(qubit_a));
+
+    add_MCRZ(circ, controls, qubit_b, -theta);
 }
 
 // ------------------- Wxj and Wyj blocks -------------------
@@ -192,8 +204,7 @@ void add_Qx_layer(QuantumCircuit& circ,
                   double l) {
     UINT n = qx.size();
     for (UINT j = 0; j < n; ++j) {
-        add_Wxj(circ, a1, a2, qx, j, tau,p_q_real = extract_pressure(psiT.real)
-p_q_imag = extract_pressure(psiT.imag) u_bar, rho_bar, l);
+        add_Wxj(circ, a1, a2, qx, j, tau, u_bar, rho_bar, l);
     }
 }
 
@@ -215,7 +226,7 @@ void build_lee_trotter_step(QuantumCircuit& circ,
                             double u_bar,
                             double rho_bar,
                             double l) {
-    UINT a1 = 0, a2 = 1;
+    UINT a1 = 0, a2 = 0;
 
     std::vector<UINT> qx(n), qy(n);
     for (int i = 0; i < n; ++i) {
@@ -223,8 +234,8 @@ void build_lee_trotter_step(QuantumCircuit& circ,
         qy[i] = 2 + n + i;
     }
 
-    add_Qx_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
     add_Qy_layer(circ, a1, a2, qy, tau, rho_bar, l);
+    add_Qx_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
 }
 
 // ------------------- Python-visible wrapper: evolve state -------------------
