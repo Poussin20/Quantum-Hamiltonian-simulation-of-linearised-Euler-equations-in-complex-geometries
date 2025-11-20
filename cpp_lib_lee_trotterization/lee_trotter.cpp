@@ -25,11 +25,13 @@ void add_Pj(QuantumCircuit& circ,
             const std::vector<UINT>& qubits,
             UINT j,
             double lambda) {
+    CPPCTYPE im(0, 1);
+
     ComplexMatrix mat(2, 2);
     mat(0, 0) = 1;
     mat(0, 1) = 0;
     mat(1, 0) = 0;
-    mat(1, 1) = exp(std::complex<double>(0.0, lambda));
+    mat(1, 1) = exp(im * lambda);
     circ.add_gate(gate::DenseMatrix(qubits[j], mat));
 }
 
@@ -63,7 +65,7 @@ void add_Uj_dagger(QuantumCircuit& circ,
         circ.add_gate(CNOT(target, qubits[(UINT)m]));
     }
 
-    add_Pj(circ, qubits, j, lambda);
+    add_Pj(circ, qubits, j, -lambda);
 
     circ.add_gate(H(target));
 }
@@ -141,12 +143,12 @@ void add_Wxj(QuantumCircuit& circ,
         controls_zz.push_back(qx[m]);
     }
 
-    const double theta_zz = -tau / (rho_bar * l);
+    const double theta_zz = (-1 * tau) / (rho_bar * l);
     add_MCRZZ(circ, controls_zz, a2, qx[j], theta_zz);
 
     add_Uj(circ, qx, j, lambda);
-    circ.add_gate(X(a2));
-    circ.add_gate(H(a1));
+    circ.add_gate(H(a2));
+    circ.add_gate(X(a1));
 
     add_Uj_dagger(circ, qx, j, lambda);
 
@@ -155,7 +157,7 @@ void add_Wxj(QuantumCircuit& circ,
         controls.push_back(qx[m]);
     }
 
-    const double theta_z = -u_bar * tau / l;
+    const double theta_z = (-1 * u_bar) * tau / l;
     if (!controls.empty()) {
         add_MCRZ(circ, controls, qx[j], theta_z);
     } else {
@@ -185,7 +187,7 @@ void add_Wyj(QuantumCircuit& circ,
         controls_zz.push_back(qy[m]);
     }
 
-    const double theta_zz = -tau / (rho_bar * l);
+    const double theta_zz = (-1 * tau) / (rho_bar * l);
     add_MCRZZ(circ, controls_zz, a1, qy[j], theta_zz);
 
     add_Uj(circ, qy, j, lambda);
@@ -204,7 +206,7 @@ void add_Qx_layer(QuantumCircuit& circ,
                   double l) {
     UINT n = qx.size();
     for (UINT j = 0; j < n; ++j) {
-        add_Wxj(circ, a1, a2, qx, j, tau, u_bar, rho_bar, l);
+        add_Wxj(circ, a1, a2, qx, (UINT)j, tau, u_bar, rho_bar, l);
     }
 }
 
@@ -215,8 +217,9 @@ void add_Qy_layer(QuantumCircuit& circ,
                   double rho_bar,
                   double l) {
     UINT n = qy.size();
-    for (UINT j = 0; j < n; ++j) {
-        add_Wyj(circ, a1, a2, qy, j, tau, rho_bar, l);
+//    for (UINT j = n; j-- > 0; ) {
+     for (UINT j = 0; j < n; ++j){
+        add_Wyj(circ, a1, a2, qy, (UINT)j, tau, rho_bar, l);
     }
 }
 
@@ -226,7 +229,7 @@ void build_lee_trotter_step(QuantumCircuit& circ,
                             double u_bar,
                             double rho_bar,
                             double l) {
-    UINT a1 = 0, a2 = 0;
+    UINT a1 = 0, a2 = 1;
 
     std::vector<UINT> qx(n), qy(n);
     for (int i = 0; i < n; ++i) {
@@ -234,8 +237,9 @@ void build_lee_trotter_step(QuantumCircuit& circ,
         qy[i] = 2 + n + i;
     }
 
+    add_Qx_layer(circ, a1, a2, qx, tau / 2, u_bar, rho_bar, l);
     add_Qy_layer(circ, a1, a2, qy, tau, rho_bar, l);
-    add_Qx_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
+    add_Qx_layer(circ, a1, a2, qx, tau / 2, u_bar, rho_bar, l);
 }
 
 // ------------------- Python-visible wrapper: evolve state -------------------
