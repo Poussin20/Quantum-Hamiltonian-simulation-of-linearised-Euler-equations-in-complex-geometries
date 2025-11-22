@@ -17,6 +17,7 @@ using namespace gate;
 using UINT = unsigned int;
 using CPPCTYPE = std::complex<double>;
 
+
 inline std::size_t encode_basis_index(
     UINT comp,
     UINT ix, UINT iy,
@@ -35,8 +36,8 @@ inline std::size_t encode_basis_index(
 
     // x register
     for (UINT b = 0; b < qx.size(); ++b) {
-        UINT bit = (ix >> b) & 1u;
-        idx |= (std::size_t(bit) << qx[b]);
+        UINT bit = (ix >> b) & 1u;          // little-endian within ix
+        idx |= (std::size_t(bit) << qx[b]); // place at qubit qx[b]
     }
 
     // y register
@@ -135,9 +136,9 @@ void add_MCRY(QuantumCircuit& circ,
               const std::vector<UINT>& control_qubits,
               UINT target_qubit,
               double theta) {
-    /*  RY(theta) matrix:
-     [ cos(theta/2)  -sin(theta/2) ]
-     [ sin(theta/2)   cos(theta/2) ] */
+    // RY(theta) matrix:
+    // [ cos(theta/2)  -sin(theta/2) ]
+    // [ sin(theta/2)   cos(theta/2) ]
 
     double c = std::cos(theta / 2.0);
     double s = std::sin(theta / 2.0);
@@ -194,8 +195,12 @@ void add_Wxj(QuantumCircuit& circ,
              double l) {
     double lambda = -M_PI / 2.0;
 
+    //H gate on a2
     circ.add_gate(H(a2));
+    //X gate on a1
     circ.add_gate(X(a1));
+    
+    //Uj_dagger on qx starting at j
     add_Uj_dagger(circ, qx, j, lambda);
 
     std::vector<UINT> controls_zz;
@@ -205,12 +210,17 @@ void add_Wxj(QuantumCircuit& circ,
     }
 
     const double theta_zz = (-1 * tau) / (rho_bar * l);
-    add_MCRZZ(circ, controls_zz, a2, qx[j], theta_zz);
+    //MCRZZ on qx[j], a2, controls_zz
+    add_MCRZZ(circ, controls_zz, qx[j], a2, theta_zz);
 
     add_Uj(circ, qx, j, lambda);
+    
+    //H gate on a2
     circ.add_gate(H(a2));
+    //X gate on a1
     circ.add_gate(X(a1));
 
+    //add_Uj_dagger(circ, qx, j, lambda);
     add_Uj_dagger(circ, qx, j, lambda);
 
     std::vector<UINT> controls;
@@ -218,13 +228,15 @@ void add_Wxj(QuantumCircuit& circ,
         controls.push_back(qx[m]);
     }
 
-    const double theta_z = (-1 * u_bar) * tau / l;
+    //MCRZ on qx[j] controls
+    const double theta_z = (+1 * u_bar * tau) / l;
     if (!controls.empty()) {
         add_MCRZ(circ, controls, qx[j], theta_z);
     } else {
         circ.add_gate(RZ(qx[j], theta_z));
     }
 
+    //Uj on qx starting at j
     add_Uj(circ, qx, j, lambda);
 }
 
@@ -248,7 +260,7 @@ void add_Wyj(QuantumCircuit& circ,
     }
 
     const double theta_zz = (-1 * tau) / (rho_bar * l);
-    add_MCRZZ(circ, controls_zz, a1, qy[j], theta_zz);
+    add_MCRZZ(circ, controls_zz, qy[j], a1, theta_zz);
 
     add_Uj(circ, qy, j, lambda);
     circ.add_gate(X(a2));
@@ -454,10 +466,10 @@ void build_lee_trotter_step(QuantumCircuit& circ,
         qy[i] = 2 + n + i;
     }
 
-    //add_Qy_layer(circ, a1, a2, qy, tau, rho_bar, l);
-    //add_Qx_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
-    add_Qy_tilde_layer(circ, a1, a2, qy, tau, rho_bar, l);
-    add_Qx_tilde_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
+    add_Qx_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
+    add_Qy_layer(circ, a1, a2, qy, tau, rho_bar, l);
+    //add_Qx_tilde_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
+    //add_Qy_tilde_layer(circ, a1, a2, qy, tau, rho_bar, l);
 
 }
 
@@ -586,6 +598,43 @@ void build_lee_initial_state_ic(int n,
     }
 }
 
+void build_lee_initial_state_using_H_X_gate_ic(int n,
+                                double amplitude,
+                                QuantumState& state)
+{
+    const int n_qubits = 2 + 2*n;
+    state.set_zero_state();
+
+    // Layout
+    UINT a1 = 0;
+    UINT a2 = 1;
+    std::vector<UINT> qx(n), qy(n);
+    for (int i = 0; i < n; ++i) {
+        qx[i] = 2 + i;
+        qy[i] = 2 + n + i;
+    }
+
+    QuantumCircuit circ(n_qubits);
+
+    // Grid size
+    const UINT N = 1u << n;   // 2^n
+    const UINT center = N/2;  // integer index of center row/column
+
+    /*  
+     Binary expansion of the center index
+     center = prefix + 0 for low bit (but block is 2x2 => last bit is superposition) 
+     */
+    for (int i = 0; i < n-1; ++i) {
+        if ( (center >> (i+1)) & 1u ) circ.add_gate(gate::X(qx[i+1]));
+        if ( (center >> (i+1)) & 1u ) circ.add_gate(gate::X(qy[i+1]));
+    }
+
+    // lowest-order position bits create the 2×2 block
+    circ.add_gate(gate::H(qx[0]));
+    circ.add_gate(gate::H(qy[0]));
+
+    circ.update_quantum_state(&state);
+}
 
 
 py::array_t<CPPCTYPE> evolve_lee(int n,
@@ -666,8 +715,9 @@ py::array_t<CPPCTYPE> evolve_lee_default_ic(
     // Create quantum state
     QuantumState state(n_qubits);
 
-    // Prepare initial condition in-place (Fig. 8 block)
-    build_lee_initial_state_ic(n, amplitude, state);
+    // Prepare initial condition in-place or with H/X gate (Fig. 8 block)
+    // build_lee_initial_state_ic(n, amplitude, state);
+    build_lee_initial_state_using_H_X_gate_ic(n, amplitude, state);
 
     // Evolve in-place
     evolve_lee_ic(n, tau, steps, u_bar, rho_bar, l, state);
