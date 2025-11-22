@@ -162,8 +162,7 @@ void add_MCRY(QuantumCircuit& circ,
 
 
 // ------------------- Multi-controlled RZZ -------------------
-// Implements exp(-i theta Z_a Z_b / 2) when all control_qubits = 1.
-// Using decomposition: RZZ(a,b,theta) = CNOT(a,b) * RZ_b(theta) * CNOT(a,b)
+// Using decomposition given in Fig 13 
 
 void add_MCRZZ(QuantumCircuit& circ,
                const std::vector<UINT>& control_qubits,
@@ -229,7 +228,7 @@ void add_Wxj(QuantumCircuit& circ,
     }
 
     //MCRZ on qx[j] controls
-    const double theta_z = (+1 * u_bar * tau) / l;
+    const double theta_z = (-1 * u_bar * tau) / (l);
     if (!controls.empty()) {
         add_MCRZ(circ, controls, qx[j], theta_z);
     } else {
