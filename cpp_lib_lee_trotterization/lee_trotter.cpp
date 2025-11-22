@@ -106,9 +106,12 @@ void add_Uj_dagger(QuantumCircuit& circ,
 void add_MCRZ(QuantumCircuit& circ,
               const std::vector<UINT>& control_qubits,
               UINT target_qubit,
-              double theta) {    
-    CPPCTYPE p0 = std::exp(CPPCTYPE(0.0, -theta/2.0));
-    CPPCTYPE p1 = std::exp(CPPCTYPE(0.0, +theta/2.0));
+              double theta) {
+    CPPCTYPE im(0, 1);
+    CPPCTYPE im2(0, 1);
+
+    CPPCTYPE p0 = exp(im * (-1 * theta/2.0));
+    CPPCTYPE p1 = exp(im * (+1 * theta/2.0));
 
     ComplexMatrix mat(2, 2);
     mat(0, 0) = p0;
@@ -267,7 +270,42 @@ void add_Wyj(QuantumCircuit& circ,
 }
 
 
+// ------------------- Helper to use U_j and U_j_dagger for W_tilde function -------------------
 
+void add_Uj_tilde(QuantumCircuit& circ,
+                       UINT ancilla,
+                       const std::vector<UINT>& q,
+                       UINT j,
+                       double lambda) {
+    std::vector<UINT> reg;
+    reg.reserve(j + 2);
+    for (UINT m = 0; m <= j; ++m) {
+        reg.push_back(q[m]);
+    }
+    reg.push_back(ancilla);
+
+    UINT jj = (UINT)reg.size() - 1;
+
+    add_Uj(circ, reg, jj, lambda);
+}
+
+void add_Uj_dagger_tilde(QuantumCircuit& circ,
+                       UINT ancilla,
+                       const std::vector<UINT>& q,
+                       UINT j,
+                       double lambda) {
+    std::vector<UINT> reg;
+    reg.reserve(j + 2);
+    
+    for (UINT m = 0; m <= j; ++m) {
+        reg.push_back(q[m]);
+    }
+    reg.push_back(ancilla);
+
+    UINT jj = (UINT)reg.size() - 1;
+
+    add_Uj_dagger(circ, reg, jj, lambda);
+}
 // ------------------- Wxj_tilde and Wyj_tilde blocks -------------------
 
 void add_Wxj_tilde(QuantumCircuit& circ,
@@ -313,8 +351,9 @@ void add_Wxj_tilde(QuantumCircuit& circ,
     //X gate on j
     circ.add_gate(X(qx[j]));
 
+
     //Uj_dagge on qx starting at a2
-    add_Uj_dagger(circ, qx, a2, lambda);
+    add_Uj_dagger_tilde(circ, a2, qx, j, lambda);
 
     //multi controlled Rz on a2 with controlled on q[0]->q[j]+a1
     std::vector<UINT> controls_rz_a2;
@@ -331,7 +370,7 @@ void add_Wxj_tilde(QuantumCircuit& circ,
     }
 
     //Uj on qx starting at a2
-    add_Uj(circ, qx, a2, lambda);
+    add_Uj_tilde(circ, a2, qx, j, lambda);
 
     //X gate on a1
     circ.add_gate(X(a1));
@@ -363,11 +402,7 @@ void add_Wyj_tilde(QuantumCircuit& circ,
     add_MCRY(circ, controls_ry, a1, theta_y);
 
     //Uj_dagge on qy starting at a1
-    std::vector<UINT> controls_uj_dagger;
-    for (UINT m = 0; m <= j; ++m) {
-        controls_uj_dagger.push_back(qy[m]);
-    }
-    add_Uj_dagger(circ, controls_uj_dagger, a1, lambda);
+    add_Uj_dagger_tilde(circ, a1, qy, j, lambda);
 
     //Multi Controlled RZ on a1 with controlled on q[0]->q[j]+a2
     std::vector<UINT> controls_rz_a1;
@@ -384,11 +419,7 @@ void add_Wyj_tilde(QuantumCircuit& circ,
     }
 
     //Uj on qy starting at a1
-    std::vector<UINT> controls_uj;
-    for (UINT m = 0; m <= j; ++m) {
-        controls_uj.push_back(qy[m]);
-    }
-    add_Uj(circ, controls_uj, a1, lambda);
+    add_Uj_tilde(circ, a1, qy, j, lambda);
 
     //X gate on a2
     circ.add_gate(X(a2));
@@ -465,10 +496,10 @@ void build_lee_trotter_step(QuantumCircuit& circ,
         qy[i] = 2 + n + i;
     }
 
-    add_Qx_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
-    add_Qy_layer(circ, a1, a2, qy, tau, rho_bar, l);
-    //add_Qx_tilde_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
-    //add_Qy_tilde_layer(circ, a1, a2, qy, tau, rho_bar, l);
+    //add_Qx_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
+    //add_Qy_layer(circ, a1, a2, qy, tau, rho_bar, l);
+    add_Qx_tilde_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
+    add_Qy_tilde_layer(circ, a1, a2, qy, tau, rho_bar, l);
 
 }
 
@@ -715,8 +746,8 @@ py::array_t<CPPCTYPE> evolve_lee_default_ic(
     QuantumState state(n_qubits);
 
     // Prepare initial condition in-place or with H/X gate (Fig. 8 block)
-    // build_lee_initial_state_ic(n, amplitude, state);
-    build_lee_initial_state_using_H_X_gate_ic(n, amplitude, state);
+    build_lee_initial_state_ic(n, amplitude, state);
+    // build_lee_initial_state_using_H_X_gate_ic(n, amplitude, state);
 
     // Evolve in-place
     evolve_lee_ic(n, tau, steps, u_bar, rho_bar, l, state);
