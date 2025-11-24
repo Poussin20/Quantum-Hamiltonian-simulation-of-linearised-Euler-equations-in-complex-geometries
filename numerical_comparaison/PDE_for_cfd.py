@@ -1,10 +1,6 @@
 import numpy as np
 from scipy.linalg import expm
 import matplotlib.pyplot as plt
-from qulacs import QuantumState, QuantumCircuit, Observable, PauliOperator
-from qulacs.gate import X, Z, RX, RY, RZ, CNOT, merge, DenseMatrix,add
-from qulacs.state import inner_product
-import matplotlib.pyplot as plt
 import numpy as np
 
 import lee_trotter
@@ -158,16 +154,16 @@ def fdm_evolution(f0, T):
 # Compute the quantum evolution using the LEE trotter step
 #  Trotter step V(tau) ≈ Q_y(Tau) Q_x(Tau)
 # ----------------------
-def quantum_evolution_for_lee(n_):
-    ntot = 2 + 2 * n_
+def quantum_evolution_for_lee(f0, T):
+    ntot = 2 + 2 * n
     dim = 2**ntot
 
     #assert f0.size == dim
 
     #psi0 = lee_trotter.build_lee_initial_state(n, amplitude=0.5)
-    steps = int(round(3.0 / tau_q))
+    steps = int(round(T / tau_q))
     #psiT = lee_trotter.evolve_lee(n, tau_q, steps, u_bar, rho_bar, l, psi0)
-    psiT = lee_trotter.evolve_lee_default_ic(n_, tau_q, steps, u_bar, rho_bar, l)
+    psiT = lee_trotter.evolve_lee_default_ic(n, tau_q, steps, u_bar, rho_bar, l)
     return np.array(psiT)
 
 
@@ -208,7 +204,7 @@ def quantum_evolution_for_lee_qiskit(n_):
 # Compute snapshots & plot
 # ----------------------
 
-""" fig, axes = plt.subplots(len(times), 3, figsize=(11, 3.5 * len(times)))
+fig, axes = plt.subplots(len(times), 3, figsize=(11, 3.5 * len(times)))
 all_values = []
 
 fig.suptitle(
@@ -221,25 +217,25 @@ fig.suptitle(
 for row, T in enumerate(times):
 
     # compute all three solutions
-    #f_exact = exact_solution(f0, T)
-    f_q_qiskit     = quantum_evolution_for_lee_qiskit(f0, T)
-    #f_q     = quantum_evolution_for_lee(f0, T)
-    #f_fdm   = fdm_evolution(f0, T)
+    f_exact = exact_solution(f0, T)
+    #f_q_qiskit     = quantum_evolution_for_lee_qiskit(f0, T)
+    f_q     = quantum_evolution_for_lee(f0, T)
+    f_fdm   = fdm_evolution(f0, T)
 
-    #all_values.extend(extract_pressure(f_exact).flatten())
+    all_values.extend(extract_pressure(f_exact).flatten())
     #all_values.extend(extract_pressure(f_q_qiskit).flatten())
     all_values.extend(extract_pressure(f_q).flatten())
-    #all_values.extend(extract_pressure(f_fdm).flatten())
+    all_values.extend(extract_pressure(f_fdm).flatten())
 
     vmin = min(all_values)
     vmax = max(all_values)
-    #p_exact = extract_pressure(f_exact)
-    p_q_qiskit     = extract_pressure_from_psi(f_q_qiskit, n, Nx, Ny, energy_norm=1.0)
-    #p_q     = extract_pressure_from_psi(f_q, n, Nx, Ny, energy_norm=1.0)
-    #p_fdm   = extract_pressure(f_fdm)
+    p_exact = extract_pressure(f_exact)
+    #p_q_qiskit     = extract_pressure_from_psi(f_q_qiskit, n, Nx, Ny, energy_norm=1.0)
+    p_q     = extract_pressure_from_psi(f_q, n, Nx, Ny, energy_norm=1.0)
+    p_fdm   = extract_pressure(f_fdm)
 
-    #data_list  = [p_q, p_exact, p_fdm]
-    data_list  = [p_q_qiskit]
+    data_list  = [p_q, p_exact, p_fdm]
+    #data_list  = [p_q_qiskit]
     title_list = ["Quantum simulation in Qulacs", "Matrix exponential", "Classical FDM"]
 
     for col, (data, title) in enumerate(zip(data_list, title_list)):
@@ -251,9 +247,9 @@ for row, T in enumerate(times):
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
 plt.tight_layout()
-#plt.show() """
+plt.show()
 
-
+""" 
 def compare_functions_runtime(f1, f2, params, repeat=1):
     times_f1 = []
     times_f2 = []
@@ -288,4 +284,4 @@ def compare_functions_runtime(f1, f2, params, repeat=1):
 
 
 params = [1,2,3,4,5,6]
-compare_functions_runtime(quantum_evolution_for_lee_qiskit, quantum_evolution_for_lee, params)
+compare_functions_runtime(quantum_evolution_for_lee_qiskit, quantum_evolution_for_lee, params) """

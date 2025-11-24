@@ -7,8 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(pybind11 REQUIRED)
 find_package(OpenMP REQUIRED)
 
-include_directories(/home/alexandre/OwnProject/QunaSys/qulacs/include)
-link_directories(/home/alexandre/OwnProject/QunaSys/qulacs/lib)      
+#here put the qulacs paths
+include_directories(qulacs/include)
+link_directories(qulacs/lib)      
 
 pybind11_add_module(lee_trotter lee_trotter.cpp)
 
@@ -20,5 +21,6 @@ target_link_libraries(lee_trotter
         OpenMP::OpenMP_CXX
 )
 
+#here put the location of this git before /numerical_comparaison
 install(TARGETS lee_trotter
-        LIBRARY DESTINATION /home/alexandre/OwnProject/QunaSys/QunaSys_assignment/numerical_comparaison)
+        LIBRARY DESTINATION /numerical_comparaison)
