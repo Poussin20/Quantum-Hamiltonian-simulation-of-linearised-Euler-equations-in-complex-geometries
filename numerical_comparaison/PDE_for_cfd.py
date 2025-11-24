@@ -12,6 +12,7 @@ import lee_trotter
 from qiskit.quantum_info import Statevector
 import qiskit_implementation_lee_troterization
 
+import time
 
 # ----------------------
 # Parameters
@@ -157,23 +158,23 @@ def fdm_evolution(f0, T):
 # Compute the quantum evolution using the LEE trotter step
 #  Trotter step V(tau) ≈ Q_y(Tau) Q_x(Tau)
 # ----------------------
-def quantum_evolution_for_lee(f0, T):
-    ntot = 2 + 2 * n
+def quantum_evolution_for_lee(n_):
+    ntot = 2 + 2 * n_
     dim = 2**ntot
 
-    assert f0.size == dim
+    #assert f0.size == dim
 
     #psi0 = lee_trotter.build_lee_initial_state(n, amplitude=0.5)
-    steps = int(round(T / tau_q))
+    steps = int(round(3.0 / tau_q))
     #psiT = lee_trotter.evolve_lee(n, tau_q, steps, u_bar, rho_bar, l, psi0)
-    psiT = lee_trotter.evolve_lee_default_ic(n, tau_q, steps, u_bar, rho_bar, l)
+    psiT = lee_trotter.evolve_lee_default_ic(n_, tau_q, steps, u_bar, rho_bar, l)
     return np.array(psiT)
 
 
-def quantum_evolution_for_lee_qiskit(f0, T):
-    ntot = 2 + 2 * n
+def quantum_evolution_for_lee_qiskit(n_):
+    ntot = 2 + 2 * n_
     dim = 2**ntot
-    assert f0.size == dim 
+    #assert f0.size == dim 
 
     psi0 = np.zeros(dim, dtype=complex)
 
@@ -184,12 +185,12 @@ def quantum_evolution_for_lee_qiskit(f0, T):
             ix = cx + dx - 1
             iy = cy + dy - 1
             if 0 <= ix < Nx and 0 <= iy < Ny:
-                idx_q = basis_index(a1=0, a2=0, ix=ix, iy=iy, n=n)
+                idx_q = basis_index(a1=0, a2=0, ix=ix, iy=iy, n=n_)
                 psi0[idx_q] = 0.5
 
-    steps = int(round(T / tau_q))
+    steps = int(round(3.0 / tau_q))
     qc = qiskit_implementation_lee_troterization.build_lee_trotter_evolution_qiskit(
-        n=n,
+        n=n_,
         tau=tau_q,
         steps=steps,
         u_bar=u_bar,
@@ -206,7 +207,8 @@ def quantum_evolution_for_lee_qiskit(f0, T):
 # ----------------------
 # Compute snapshots & plot
 # ----------------------
-fig, axes = plt.subplots(len(times), 3, figsize=(11, 3.5 * len(times)))
+
+""" fig, axes = plt.subplots(len(times), 3, figsize=(11, 3.5 * len(times)))
 all_values = []
 
 fig.suptitle(
@@ -219,25 +221,26 @@ fig.suptitle(
 for row, T in enumerate(times):
 
     # compute all three solutions
-    f_exact = exact_solution(f0, T)
+    #f_exact = exact_solution(f0, T)
     f_q_qiskit     = quantum_evolution_for_lee_qiskit(f0, T)
     #f_q     = quantum_evolution_for_lee(f0, T)
-    f_fdm   = fdm_evolution(f0, T)
+    #f_fdm   = fdm_evolution(f0, T)
 
-    all_values.extend(extract_pressure(f_exact).flatten())
-    all_values.extend(extract_pressure(f_q_qiskit).flatten())
-    #all_values.extend(extract_pressure(f_q).flatten())
-    all_values.extend(extract_pressure(f_fdm).flatten())
+    #all_values.extend(extract_pressure(f_exact).flatten())
+    #all_values.extend(extract_pressure(f_q_qiskit).flatten())
+    all_values.extend(extract_pressure(f_q).flatten())
+    #all_values.extend(extract_pressure(f_fdm).flatten())
 
     vmin = min(all_values)
     vmax = max(all_values)
-    p_exact = extract_pressure(f_exact)
+    #p_exact = extract_pressure(f_exact)
     p_q_qiskit     = extract_pressure_from_psi(f_q_qiskit, n, Nx, Ny, energy_norm=1.0)
     #p_q     = extract_pressure_from_psi(f_q, n, Nx, Ny, energy_norm=1.0)
-    p_fdm   = extract_pressure(f_fdm)
+    #p_fdm   = extract_pressure(f_fdm)
 
-    data_list  = [p_q_qiskit, p_exact, p_fdm]
-    title_list = ["Quantum simulation in Qiskit", "Matrix exponential", "Classical FDM"]
+    #data_list  = [p_q, p_exact, p_fdm]
+    data_list  = [p_q_qiskit]
+    title_list = ["Quantum simulation in Qulacs", "Matrix exponential", "Classical FDM"]
 
     for col, (data, title) in enumerate(zip(data_list, title_list)):
         ax = axes[row, col] if len(times) > 1 else axes[col]
@@ -248,5 +251,41 @@ for row, T in enumerate(times):
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
 plt.tight_layout()
-plt.show()
+#plt.show() """
 
+
+def compare_functions_runtime(f1, f2, params, repeat=1):
+    times_f1 = []
+    times_f2 = []
+    
+    for p in params:
+        print(p)
+        start = time.perf_counter()
+        for _ in range(repeat):
+            f1(p)
+        end = time.perf_counter()
+        times_f1.append((end - start) / repeat)
+        
+        # Time f2
+        start = time.perf_counter()
+        for _ in range(repeat):
+            f2(p)
+        end = time.perf_counter()
+        times_f2.append((end - start) / repeat)
+
+    # Plot results
+    plt.figure(figsize=(8, 5))
+    plt.plot(params, times_f1, label="Qiskit implementation")
+    plt.plot(params, times_f2, label="Qulacs implementation")
+    plt.xlabel("Number of Qubits n")
+    plt.ylabel("Execution Time (seconds)")
+    plt.title("Runtime Comparison")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    return times_f1, times_f2
+
+
+params = [1,2,3,4,5,6]
+compare_functions_runtime(quantum_evolution_for_lee_qiskit, quantum_evolution_for_lee, params)
