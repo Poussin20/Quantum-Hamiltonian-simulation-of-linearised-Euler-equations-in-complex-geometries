@@ -49,6 +49,22 @@ inline std::size_t encode_basis_index(
     return idx;
 }
 
+/* // ------------------- RZ(theta) -------------------
+void add_RZ_custom(QuantumCircuit& circ, UINT target, double theta) {
+    CPPCTYPE im(0, 1);
+
+    CPPCTYPE p0 = exp(im * (-1 * theta/2.0));
+    CPPCTYPE p1 = exp(im * (+1 * theta/2.0));
+
+    ComplexMatrix mat(2, 2);
+    mat(0, 0) = p0;
+    mat(0, 1) = 0;
+    mat(1, 0) = 0;
+    mat(1, 1) = p1;
+
+    auto gate = gate::DenseMatrix(target, mat);
+    circ.add_gate(gate);
+} */
 
 // ------------------- P_j(lambda) -------------------
 
@@ -108,7 +124,6 @@ void add_MCRZ(QuantumCircuit& circ,
               UINT target_qubit,
               double theta) {
     CPPCTYPE im(0, 1);
-    CPPCTYPE im2(0, 1);
 
     CPPCTYPE p0 = exp(im * (-1 * theta/2.0));
     CPPCTYPE p1 = exp(im * (+1 * theta/2.0));
@@ -235,7 +250,7 @@ void add_Wxj(QuantumCircuit& circ,
     if (!controls.empty()) {
         add_MCRZ(circ, controls, qx[j], theta_z);
     } else {
-        circ.add_gate(RZ(qx[j], theta_z));
+        circ.add_gate(RotZ(qx[j], theta_z));
     }
 
     //Uj on qx starting at j
@@ -366,7 +381,7 @@ void add_Wxj_tilde(QuantumCircuit& circ,
     if (!controls_rz_a2.empty()) {
         add_MCRZ(circ, controls_rz_a2, a2, theta_z_a2);
     } else {
-        circ.add_gate(RZ(a2, theta_z_a2));
+        circ.add_gate(RotZ(a2, theta_z_a2));
     }
 
     //Uj on qx starting at a2
@@ -428,8 +443,7 @@ void add_Wyj_tilde(QuantumCircuit& circ,
     circ.add_gate(X(qy[j]));
 }
 
-// ------------------- Qx(tau), Qy(tau) layers and 1 step V(tau) -------------------
-
+// ------------------- Qx(tau), Qy(tau) layers -------------------
 void add_Qx_layer(QuantumCircuit& circ,
                   UINT a1, UINT a2,
                   const std::vector<UINT>& qx,
@@ -482,6 +496,7 @@ void add_Qy_tilde_layer(QuantumCircuit& circ,
     }
 }
 
+//  ------------------- One Lee Trotter step -------------------
 void build_lee_trotter_step(QuantumCircuit& circ,
                             int n,
                             double tau,
@@ -496,11 +511,8 @@ void build_lee_trotter_step(QuantumCircuit& circ,
         qy[i] = 2 + n + i;
     }
 
-    //add_Qx_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
-    //add_Qy_layer(circ, a1, a2, qy, tau, rho_bar, l);
-    add_Qx_tilde_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
-    add_Qy_tilde_layer(circ, a1, a2, qy, tau, rho_bar, l);
-
+    add_Qx_layer(circ, a1, a2, qx, tau, u_bar, rho_bar, l);
+    add_Qy_layer(circ, a1, a2, qy, tau, rho_bar, l);
 }
 
 // ------------------- Python-visible wrapper: evolve state -------------------
@@ -536,7 +548,7 @@ py::array_t<CPPCTYPE> build_lee_initial_state(int n, double amplitude = 0.5) {
     const UINT end   = start + size_block;
 
     // classical L2 norm of the pressure field:
-    // four cells each with 'amplitude'
+    //      four cells each with 'amplitude'
     const double energy_norm = std::sqrt(4.0 * amplitude * amplitude);
     const double encoded_amp = (energy_norm > 0.0)
                                  ? amplitude / energy_norm
